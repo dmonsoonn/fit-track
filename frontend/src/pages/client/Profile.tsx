@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/components/layout/PageWrapper'
-import { Button, Card, CardBody, Field, Input, PageLoader, toast } from '@/components/ui'
+import { Button, Card, CardBody, ConfirmDialog, DateInput, Field, Input, PageLoader, toast } from '@/components/ui'
 import { Chip } from '@/components/ui/Chip'
 import { clientApi } from '@/api'
 import { apiError } from '@/api/client'
+import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 import { LEVEL_LABEL, toISODate } from '@/lib/format'
 import type { ClientProfilePatch, FitnessLevel } from '@/types'
 
@@ -14,11 +15,17 @@ export default function ClientProfile() {
   const qc = useQueryClient()
   const { data: client, isLoading } = useQuery({ queryKey: ['client-me'], queryFn: clientApi.me })
 
-  const [form, setForm] = useState<ClientProfilePatch>({})
+  const [form, setFormRaw] = useState<ClientProfilePatch>({})
+  const { setDirty, blocker } = useUnsavedGuard()
+
+  const setForm: typeof setFormRaw = (updater) => {
+    setDirty(true)
+    setFormRaw(updater)
+  }
 
   useEffect(() => {
     if (client) {
-      setForm({
+      setFormRaw({
         first_name: client.first_name,
         last_name: client.last_name,
         goal: client.goal,
@@ -31,10 +38,23 @@ export default function ClientProfile() {
     }
   }, [client])
 
+  const validate = (): boolean => {
+    if (form.weight != null && form.weight <= 0) {
+      toast.error('Вес должен быть больше нуля')
+      return false
+    }
+    if (form.height != null && form.height <= 0) {
+      toast.error('Рост должен быть больше нуля')
+      return false
+    }
+    return true
+  }
+
   const mutation = useMutation({
     mutationFn: () => clientApi.patchMe(form),
     onSuccess: () => {
       toast.success('Профиль сохранён')
+      setDirty(false)
       qc.invalidateQueries({ queryKey: ['client-me'] })
     },
     onError: (e) => toast.error(apiError(e)),
@@ -47,6 +67,15 @@ export default function ClientProfile() {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title="Личный кабинет" subtitle={client.email} />
+
+      {(client.trainer_first_name || client.trainer_last_name) && (
+        <div className="mb-4 flex items-center gap-2 rounded-card border border-line bg-card px-4 py-3">
+          <span className="text-sm text-muted">Ваш тренер:</span>
+          <span className="text-sm font-semibold text-ink">
+            {client.trainer_first_name} {client.trainer_last_name}
+          </span>
+        </div>
+      )}
 
       <Card>
         <CardBody className="flex flex-col gap-5">
@@ -67,10 +96,9 @@ export default function ClientProfile() {
           </div>
 
           <Field label="Дата рождения" table="clients" attr="date_of_birth">
-            <Input
-              type="date"
-              value={form.date_of_birth ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, date_of_birth: e.target.value || null }))}
+            <DateInput
+              value={form.date_of_birth}
+              onChange={(v) => setForm((f) => ({ ...f, date_of_birth: v }))}
             />
           </Field>
 
@@ -126,15 +154,23 @@ export default function ClientProfile() {
           </Field>
 
           <div className="flex justify-end gap-3 pt-2">
-            <Button variant="outline" onClick={() => client && setForm({ ...client })}>
+            <Button variant="outline" onClick={() => { if (client) { setDirty(false); setFormRaw({ ...client }) } }}>
               Отменить
             </Button>
-            <Button onClick={() => mutation.mutate()} loading={mutation.isPending}>
+            <Button onClick={() => { if (validate()) mutation.mutate() }} loading={mutation.isPending}>
               Сохранить
             </Button>
           </div>
         </CardBody>
       </Card>
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onClose={() => blocker.reset?.()}
+        onConfirm={() => blocker.proceed?.()}
+        title="Несохранённые изменения"
+        message="Изменения будут потеряны. Продолжить?"
+        confirmLabel="Уйти"
+      />
     </div>
   )
 }

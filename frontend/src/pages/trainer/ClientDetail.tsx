@@ -1,14 +1,14 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Pencil, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageWrapper'
-import { Avatar, Badge, Button, Card, CardBody, EmptyState, Field, Input, Modal, PageLoader, StatusBadge, toast } from '@/components/ui'
+import { Avatar, Badge, Button, Card, CardBody, ConfirmDialog, EmptyState, Field, Input, Modal, PageLoader, StatusBadge, toast } from '@/components/ui'
 import { cn } from '@/lib/cn'
 import { planApi, trainerApi, workoutApi, workoutExerciseApi } from '@/api'
 import { apiError } from '@/api/client'
 import { fullName, initials, LEVEL_LABEL, formatShortDate, formatTime, dateParts, formatLongDate, toISODate } from '@/lib/format'
-import type { Workout } from '@/types'
+import type { Workout, WorkoutPlan } from '@/types'
 
 type Tab = 'profile' | 'program' | 'results' | 'nutrition'
 const TABS: { key: Tab; label: string }[] = [
@@ -21,7 +21,8 @@ const TABS: { key: Tab; label: string }[] = [
 export default function ClientDetail() {
   const { id } = useParams()
   const clientId = Number(id)
-  const [tab, setTab] = useState<Tab>('profile')
+  const location = useLocation()
+  const [tab, setTab] = useState<Tab>((location.state as { tab?: Tab } | null)?.tab ?? 'profile')
 
   const { data: client, isLoading } = useQuery({
     queryKey: ['trainer-client', clientId],
@@ -91,29 +92,23 @@ function ProfileTab({ client }: { client: import('@/types').Client }) {
 }
 
 function ProgramTab({ clientId }: { clientId: number }) {
-  const navigate = useNavigate()
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
+  const navigate = useNavigate()
 
   const { data: plans, isLoading } = useQuery({
     queryKey: ['client-plans', clientId],
     queryFn: () => planApi.list(clientId),
   })
-  const active = plans?.find((p) => p.is_active) ?? plans?.[0]
-
-  const { data: workouts } = useQuery({
-    queryKey: ['plan-workouts', active?.workout_plan_id],
-    queryFn: () => workoutApi.listByPlan(active!.workout_plan_id),
-    enabled: !!active,
-  })
 
   const create = useMutation({
-    mutationFn: () => planApi.create(clientId, { title, is_active: true }),
+    mutationFn: () => planApi.create(clientId, { title, is_active: false }),
     onSuccess: (plan) => {
       toast.success('Программа создана')
       qc.invalidateQueries({ queryKey: ['client-plans', clientId] })
       setOpen(false)
+      setTitle('')
       navigate(`/trainer/clients/${clientId}/plans/${plan.workout_plan_id}`)
     },
     onError: (e) => toast.error(apiError(e)),
@@ -121,82 +116,128 @@ function ProgramTab({ clientId }: { clientId: number }) {
 
   if (isLoading) return <PageLoader />
 
-  if (!active) {
-    return (
-      <>
-        <EmptyState
-          title="Программа не назначена"
-          description="Создайте тренировочную программу для этого клиента."
-          action={<Button onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> Создать программу</Button>}
-        />
-        <CreatePlanModal open={open} onClose={() => setOpen(false)} title={title} setTitle={setTitle} onCreate={() => create.mutate()} loading={create.isPending} />
-      </>
-    )
-  }
+  const sorted = [...(plans ?? [])].sort((a, b) => {
+    if (a.is_active !== b.is_active) return a.is_active ? -1 : 1
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  })
 
   return (
     <div className="flex flex-col gap-4">
-      <Card>
-        <CardBody className="flex items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2>{active.title}</h2>
-              {active.is_active && <Badge tone="success">Активная</Badge>}
-            </div>
-            {active.description && <p className="mt-1 text-sm text-muted">{active.description}</p>}
-            {active.end_date && (
-              <p className="mt-1 text-xs text-muted">До {formatShortDate(active.end_date)}</p>
-            )}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate(`/trainer/clients/${clientId}/plans/${active.workout_plan_id}`)}
-          >
-            <Pencil className="h-4 w-4" /> Изменить
-          </Button>
-        </CardBody>
-      </Card>
-
-      <div className="flex items-center justify-between">
-        <h3>Тренировки</h3>
-        <Button
-          size="sm"
-          onClick={() => navigate(`/trainer/plans/${active.workout_plan_id}/workouts/new?clientId=${clientId}`)}
-        >
-          <Plus className="h-4 w-4" /> Тренировка
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setOpen(true)}>
+          <Plus className="h-4 w-4" /> Создать программу
         </Button>
       </div>
 
-      {(workouts ?? []).length === 0 ? (
-        <EmptyState title="В программе пока нет тренировок" />
+      {sorted.length === 0 ? (
+        <EmptyState
+          title="Программ нет"
+          description="Создайте тренировочную программу для этого клиента."
+        />
       ) : (
-        (workouts ?? [])
-          .slice()
-          .sort((a, b) => new Date(b.scheduled_date).getTime() - new Date(a.scheduled_date).getTime())
-          .map((w) => <WorkoutRow key={w.workout_id} workout={w} clientId={clientId} />)
+        sorted.map((p) => (
+          <ProgramCard key={p.workout_plan_id} plan={p} clientId={clientId} />
+        ))
       )}
+
+      <CreatePlanModal
+        open={open}
+        onClose={() => { setOpen(false); setTitle('') }}
+        title={title}
+        setTitle={setTitle}
+        onCreate={() => create.mutate()}
+        loading={create.isPending}
+      />
     </div>
   )
 }
 
-function WorkoutRow({ workout, clientId }: { workout: Workout; clientId: number }) {
+function ProgramCard({ plan, clientId }: { plan: WorkoutPlan; clientId: number }) {
   const navigate = useNavigate()
-  const { day, month } = dateParts(workout.scheduled_date)
+  const qc = useQueryClient()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  const activate = useMutation({
+    mutationFn: () => planApi.patch(clientId, plan.workout_plan_id, { is_active: true }),
+    onSuccess: () => {
+      toast.success('Программа назначена активной')
+      qc.invalidateQueries({ queryKey: ['client-plans', clientId] })
+    },
+    onError: (e) => toast.error(apiError(e)),
+  })
+
+  const complete = useMutation({
+    mutationFn: () => planApi.patch(clientId, plan.workout_plan_id, { is_active: false }),
+    onSuccess: () => {
+      toast.success('Программа завершена')
+      qc.invalidateQueries({ queryKey: ['client-plans', clientId] })
+    },
+    onError: (e) => toast.error(apiError(e)),
+  })
+
+  const remove = useMutation({
+    mutationFn: () => planApi.remove(clientId, plan.workout_plan_id),
+    onSuccess: () => {
+      toast.success('Программа удалена')
+      qc.invalidateQueries({ queryKey: ['client-plans', clientId] })
+    },
+    onError: (e) => toast.error(apiError(e)),
+  })
+
   return (
-    <Card
-      className="flex cursor-pointer items-center gap-3 p-3 hover:shadow-pop"
-      onClick={() => navigate(`/trainer/workouts/${workout.workout_id}/edit?clientId=${clientId}`)}
-    >
-      <div className="flex w-12 shrink-0 flex-col items-center rounded-card bg-primary-50 py-1.5 text-primary">
-        <span className="font-bold leading-none">{day}</span>
-        <span className="text-[10px]">{month}</span>
-      </div>
-      <div className="flex-1">
-        <p className="text-sm font-medium">{formatTime(workout.scheduled_date)}{workout.duration_minutes ? ` · ${workout.duration_minutes} мин` : ''}</p>
-        <StatusBadge status={workout.status} />
-      </div>
-      <ChevronRight className="h-5 w-5 text-muted" />
+    <Card>
+      <CardBody className="flex flex-col gap-3">
+        <div className="flex items-start gap-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h3>{plan.title}</h3>
+              {plan.is_active && <Badge tone="success">Активная</Badge>}
+            </div>
+            {plan.description && <p className="mt-1 text-sm text-muted">{plan.description}</p>}
+            {plan.end_date && (
+              <p className="mt-1 text-xs text-muted">До {formatShortDate(plan.end_date)}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {plan.is_active ? (
+            <Button variant="outline" size="sm" onClick={() => complete.mutate()} loading={complete.isPending}>
+              Завершить
+            </Button>
+          ) : (
+            <>
+              <Button variant="outline" size="sm" onClick={() => activate.mutate()} loading={activate.isPending}>
+                Назначить активной
+              </Button>
+              <button
+                onClick={() => setDeleteOpen(true)}
+                disabled={remove.isPending}
+                className="rounded-full p-1.5 text-muted hover:bg-danger-bg hover:text-danger disabled:opacity-50"
+                aria-label="Удалить программу"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/trainer/clients/${clientId}/plans/${plan.workout_plan_id}`)}
+          >
+            <Pencil className="h-4 w-4" /> Изменить
+          </Button>
+        </div>
+      </CardBody>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => { remove.mutate(); setDeleteOpen(false) }}
+        title="Удалить программу?"
+        message="Все тренировки в программе будут удалены. Это действие нельзя отменить."
+        confirmLabel="Удалить"
+        destructive
+      />
     </Card>
   )
 }
@@ -218,7 +259,7 @@ function CreatePlanModal({
         </div>
       }
     >
-      <Field label="Название программы" table="workout_plans" attr="title">
+      <Field label="Название программы" table="workout_plans" attr="title" required>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Набор массы — фаза 1" />
       </Field>
     </Modal>

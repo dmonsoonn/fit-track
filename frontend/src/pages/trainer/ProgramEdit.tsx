@@ -3,9 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageWrapper'
-import { Button, Card, CardBody, EmptyState, Field, Input, PageLoader, StatusBadge, Textarea, toast } from '@/components/ui'
+import { Button, Card, CardBody, ConfirmDialog, DateInput, EmptyState, Field, Input, PageLoader, StatusBadge, Textarea, toast } from '@/components/ui'
 import { Chip } from '@/components/ui/Chip'
 import { planApi, workoutApi } from '@/api'
+import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 import { apiError } from '@/api/client'
 import { dateParts, formatShortDate, formatTime, toISODate } from '@/lib/format'
 
@@ -25,11 +26,19 @@ export default function ProgramEdit() {
     queryFn: () => workoutApi.listByPlan(planIdNum),
   })
 
-  const [form, setForm] = useState({ title: '', description: '', end_date: '', is_active: true })
+  const [form, setFormRaw] = useState({ title: '', description: '', end_date: '', is_active: true })
+  const [titleError, setTitleError] = useState('')
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const { setDirty, blocker } = useUnsavedGuard()
+
+  const setForm: typeof setFormRaw = (updater) => {
+    setDirty(true)
+    setFormRaw(updater)
+  }
 
   useEffect(() => {
     if (plan) {
-      setForm({
+      setFormRaw({
         title: plan.title,
         description: plan.description ?? '',
         end_date: plan.end_date ? toISODate(new Date(plan.end_date)) : '',
@@ -50,6 +59,8 @@ export default function ProgramEdit() {
       toast.success('Программа сохранена')
       qc.invalidateQueries({ queryKey: ['plan', clientId, planIdNum] })
       qc.invalidateQueries({ queryKey: ['client-plans', clientId] })
+      setDirty(false)
+      navigate(`/trainer/clients/${clientId}`, { state: { tab: 'program' } })
     },
     onError: (e) => toast.error(apiError(e)),
   })
@@ -77,8 +88,14 @@ export default function ProgramEdit() {
       <Card>
         <CardBody className="flex flex-col gap-4">
           <h2>Основные параметры</h2>
-          <Field label="Название программы" table="workout_plans" attr="title">
-            <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} />
+          <Field label="Название программы" table="workout_plans" attr="title" required error={titleError}>
+            <Input
+              value={form.title}
+              onChange={(e) => {
+                setTitleError('')
+                setForm((f) => ({ ...f, title: e.target.value }))
+              }}
+            />
           </Field>
           <Field label="Описание" table="workout_plans" attr="description">
             <Textarea
@@ -87,10 +104,9 @@ export default function ProgramEdit() {
             />
           </Field>
           <Field label="Дата окончания" table="workout_plans" attr="end_date">
-            <Input
-              type="date"
-              value={form.end_date}
-              onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
+            <DateInput
+              value={form.end_date || null}
+              onChange={(v) => setForm((f) => ({ ...f, end_date: v ?? '' }))}
             />
           </Field>
           <Field label="Статус" table="workout_plans" attr="is_active">
@@ -129,7 +145,7 @@ export default function ProgramEdit() {
                 <Card
                   key={w.workout_id}
                   className="flex cursor-pointer items-center gap-3 p-3 hover:shadow-pop"
-                  onClick={() => navigate(`/trainer/workouts/${w.workout_id}/edit?clientId=${clientId}`)}
+                  onClick={() => navigate(`/trainer/workouts/${w.workout_id}/edit?clientId=${clientId}&planId=${planIdNum}`)}
                 >
                   <div className="flex w-12 shrink-0 flex-col items-center rounded-card bg-primary-50 py-1.5 text-primary">
                     <span className="font-bold leading-none">{day}</span>
@@ -150,13 +166,41 @@ export default function ProgramEdit() {
       </div>
 
       <div className="mt-6 flex items-center justify-between">
-        <Button variant="ghost" className="text-danger" onClick={() => remove.mutate()} loading={remove.isPending}>
+        <Button variant="ghost" className="text-danger hover:bg-danger-bg hover:text-danger" onClick={() => setDeleteOpen(true)} loading={remove.isPending}>
           <Trash2 className="h-4 w-4" /> Удалить программу
         </Button>
-        <Button onClick={() => save.mutate()} loading={save.isPending}>
+        <Button
+          onClick={() => {
+            if (!form.title.trim()) {
+              setTitleError('Название обязательно')
+              return
+            }
+            save.mutate()
+          }}
+          loading={save.isPending}
+        >
           Сохранить
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => { setDirty(false); remove.mutate(); setDeleteOpen(false) }}
+        title="Удалить программу?"
+        message="Все тренировки в программе будут удалены. Это действие нельзя отменить."
+        confirmLabel="Удалить"
+        destructive
+      />
+
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onClose={() => blocker.reset?.()}
+        onConfirm={() => blocker.proceed?.()}
+        title="Несохранённые изменения"
+        message="Изменения будут потеряны. Продолжить?"
+        confirmLabel="Уйти"
+      />
     </div>
   )
 }

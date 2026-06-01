@@ -5,3 +5,8 @@ dist-ssr
 .vite
 .DS_Store
 npm-debug.log*
+
+# Playwright
+tests/fixtures/.auth/
+tests/playwright-report/
+tests/screenshots/

@@ -41,14 +41,14 @@ export function Toaster() {
   const toasts = useToastStore((s) => s.toasts)
   const remove = useToastStore((s) => s.remove)
   return (
-    <div className="fixed inset-x-0 top-3 z-[60] flex flex-col items-center gap-2 px-4">
+    <div className="fixed bottom-6 right-4 z-[60] flex flex-col items-end gap-2">
       {toasts.map((t) => {
         const Icon = ICONS[t.kind]
         return (
           <button
             key={t.id}
             onClick={() => remove(t.id)}
-            className={`flex w-full max-w-sm items-center gap-2 rounded-card border bg-card px-4 py-3 text-sm shadow-pop ${TONES[t.kind]}`}
+            className={`flex w-full max-w-sm items-center gap-2 rounded-card border bg-card px-4 py-3 text-left text-sm shadow-pop ${TONES[t.kind]}`}
           >
             <Icon className="h-5 w-5 shrink-0" />
             <span className="text-ink">{t.message}</span>

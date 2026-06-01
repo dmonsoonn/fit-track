@@ -1,5 +1,6 @@
 import { http, unwrap } from './client'
 import type {
+  AdminStats,
   Client,
   ClientProfilePatch,
   Exercise,
@@ -112,11 +113,7 @@ export const exerciseApi = {
   uploadVideo: (id: number, file: File) => {
     const form = new FormData()
     form.append('file', file)
-    return unwrap<{ uploaded: boolean }>(
-      http.post(`/exercises/${id}/video`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      }),
-    )
+    return unwrap<{ uploaded: boolean }>(http.post(`/exercises/${id}/video`, form))
   },
 }
 
@@ -146,6 +143,8 @@ export const notificationApi = {
   list: () => unwrap<Notification[]>(http.get('/notifications')),
   markRead: (id: number) => unwrap<{ read: boolean }>(http.patch(`/notifications/${id}/read`)),
   markAllRead: () => unwrap<{ read: boolean }>(http.post('/notifications/read-all')),
+  deleteOne: (id: number) => unwrap<{ deleted: boolean }>(http.delete(`/notifications/${id}`)),
+  deleteAll: () => unwrap<{ deleted: boolean }>(http.delete('/notifications')),
 }
 
 // ── Message templates ──────────────────────────────────────────────────────────
@@ -165,4 +164,9 @@ export const adminApi = {
   patchUser: (id: number, body: { role?: string; is_active?: boolean }) =>
     unwrap<User>(http.patch(`/admin/users/${id}`, body)),
   removeUser: (id: number) => unwrap<{ deleted: boolean }>(http.delete(`/admin/users/${id}`)),
+}
+
+// ── Admin stats ────────────────────────────────────────────────────────────────
+export const statsApi = {
+  adminStats: () => unwrap<AdminStats>(http.get('/admin/stats')),
 }

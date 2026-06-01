@@ -79,7 +79,10 @@ function WorkoutCard({ workout, onOpen }: { workout: Workout; onOpen: () => void
     .join(' · ')
 
   return (
-    <Card className="flex items-center gap-4 p-4">
+    <Card
+      className="flex cursor-pointer items-center gap-4 p-4 transition-shadow hover:shadow-pop"
+      onClick={onOpen}
+    >
       <div className="flex w-14 shrink-0 flex-col items-center rounded-card bg-primary-50 py-2 text-primary">
         <span className="text-xl font-bold leading-none">{day}</span>
         <span className="text-xs">{month}</span>
@@ -95,7 +98,7 @@ function WorkoutCard({ workout, onOpen }: { workout: Workout; onOpen: () => void
       <Button
         size="sm"
         variant={workout.status === 'planned' ? 'primary' : 'outline'}
-        onClick={onOpen}
+        onClick={(e) => { e.stopPropagation(); onOpen(); }}
       >
         {workout.status === 'planned' ? 'Начать' : 'Результаты'}
       </Button>

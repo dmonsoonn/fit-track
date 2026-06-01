@@ -3,8 +3,10 @@ package workout_plans
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
+	"github.com/fittrack/backend/internal/types"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -90,10 +92,10 @@ func (s *Service) Get(ctx context.Context, trainerUserID, clientID, planID int64
 }
 
 type CreateRequest struct {
-	Title       string     `json:"title"`
-	Description *string    `json:"description"`
-	IsActive    bool       `json:"is_active"`
-	EndDate     *time.Time `json:"end_date"`
+	Title       string            `json:"title"`
+	Description *string           `json:"description"`
+	IsActive    bool              `json:"is_active"`
+	EndDate     *types.FlexTime   `json:"end_date"`
 }
 
 func (s *Service) Create(ctx context.Context, trainerUserID, clientID int64, req CreateRequest) (*WorkoutPlan, error) {
@@ -116,23 +118,31 @@ func (s *Service) Create(ctx context.Context, trainerUserID, clientID int64, req
 			return nil, err
 		}
 	}
+	var endDate *time.Time
+	if req.EndDate != nil {
+		t := req.EndDate.Time
+		endDate = &t
+	}
 	return s.repo.create(ctx, createParams{
 		ClientID:    clientID,
 		Title:       req.Title,
 		Description: req.Description,
 		IsActive:    req.IsActive,
-		EndDate:     req.EndDate,
+		EndDate:     endDate,
 	})
 }
 
 type PatchRequest struct {
-	Title       *string    `json:"title"`
-	Description *string    `json:"description"`
-	IsActive    *bool      `json:"is_active"`
-	EndDate     *time.Time `json:"end_date"`
+	Title       *string           `json:"title"`
+	Description *string           `json:"description"`
+	IsActive    *bool             `json:"is_active"`
+	EndDate     *types.FlexTime   `json:"end_date"`
 }
 
 func (s *Service) Patch(ctx context.Context, trainerUserID, clientID, planID int64, req PatchRequest) (*WorkoutPlan, error) {
+	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
+		return nil, errors.New("title cannot be blank")
+	}
 	trainerID, err := s.resolveTrainerID(ctx, trainerUserID)
 	if err != nil {
 		return nil, err
@@ -144,11 +154,16 @@ func (s *Service) Patch(ctx context.Context, trainerUserID, clientID, planID int
 	if err != nil || plan == nil || plan.ClientID != clientID {
 		return nil, errNotFound
 	}
+	var endDate *time.Time
+	if req.EndDate != nil {
+		t := req.EndDate.Time
+		endDate = &t
+	}
 	return s.repo.patch(ctx, planID, patchParams{
 		Title:       req.Title,
 		Description: req.Description,
 		IsActive:    req.IsActive,
-		EndDate:     req.EndDate,
+		EndDate:     endDate,
 	})
 }
 

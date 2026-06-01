@@ -51,6 +51,8 @@ export interface Client {
   health_notes: string | null
   date_of_birth: string | null
   active_plan?: string | null
+  trainer_first_name?: string
+  trainer_last_name?: string
 }
 
 export interface WorkoutPlan {
@@ -134,8 +136,57 @@ export interface Notification {
   user_id: number
   type: NotificationType
   text: string
+  sender_name: string | null
   created_at: string
   is_read: boolean
+}
+
+// ── Admin stats ────────────────────────────────────────────────────────────────
+
+export interface AdminMetrics {
+  total_users: number
+  trainers: number
+  clients: number
+  active_workouts_today: number
+  active_workouts_today_prev: number
+  completed_last_30d: number
+  completed_prev_30d: number
+  new_registrations_7d: number
+  new_registrations_prev7d: number
+}
+
+export interface DayCount {
+  date: string
+  count: number
+}
+
+export interface GoalCount {
+  goal: string
+  count: number
+}
+
+export interface TrainerStat {
+  name: string
+  client_count: number
+  monthly_sessions: number
+  completion_rate: number
+}
+
+export interface RecentUser {
+  user_id: number
+  first_name: string
+  last_name: string
+  role: Role
+  is_active: boolean
+  created_at: string
+}
+
+export interface AdminStats {
+  metrics: AdminMetrics
+  activity_chart: DayCount[]
+  goal_distribution: GoalCount[]
+  top_trainers: TrainerStat[]
+  recent_registrations: RecentUser[]
 }
 
 // ── Request payloads ───────────────────────────────────────────────────────────

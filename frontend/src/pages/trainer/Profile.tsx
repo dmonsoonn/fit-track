@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageWrapper'
-import { Button, Card, CardBody, Field, Input, PageLoader, toast } from '@/components/ui'
+import { Button, Card, CardBody, ConfirmDialog, Field, Input, PageLoader, toast } from '@/components/ui'
 import { trainerApi } from '@/api'
 import { apiError } from '@/api/client'
+import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
 
 export default function TrainerProfile() {
   const qc = useQueryClient()
   const { data: trainer, isLoading } = useQuery({ queryKey: ['trainer-me'], queryFn: trainerApi.me })
   const [spec, setSpec] = useState('')
+  const { setDirty, blocker } = useUnsavedGuard()
 
   useEffect(() => {
     if (trainer) setSpec(trainer.specialization ?? '')
@@ -19,6 +21,7 @@ export default function TrainerProfile() {
     mutationFn: () => trainerApi.patchMe({ specialization: spec }),
     onSuccess: () => {
       toast.success('Профиль сохранён')
+      setDirty(false)
       qc.invalidateQueries({ queryKey: ['trainer-me'] })
     },
     onError: (e) => toast.error(apiError(e)),
@@ -50,7 +53,7 @@ export default function TrainerProfile() {
           <Field label="Специализация" table="trainers" attr="specialization">
             <Input
               value={spec}
-              onChange={(e) => setSpec(e.target.value)}
+              onChange={(e) => { setDirty(true); setSpec(e.target.value) }}
               placeholder="Например, силовые тренировки, реабилитация"
             />
           </Field>
@@ -71,6 +74,15 @@ export default function TrainerProfile() {
           </div>
         </CardBody>
       </Card>
+
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onClose={() => blocker.reset?.()}
+        onConfirm={() => blocker.proceed?.()}
+        title="Несохранённые изменения"
+        message="Изменения будут потеряны. Продолжить?"
+        confirmLabel="Уйти"
+      />
     </div>
   )
 }

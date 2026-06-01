@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ClipboardList, Plus, Send, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageWrapper'
-import { Badge, Button, Card, Chip, ChipGroup, EmptyState, Field, Modal, PageLoader, Select, Textarea, toast } from '@/components/ui'
+import { Badge, Button, Card, Chip, ChipGroup, ConfirmDialog, EmptyState, Field, Modal, PageLoader, Select, Textarea, toast } from '@/components/ui'
 import { templateApi, trainerApi } from '@/api'
 import { apiError } from '@/api/client'
 import { useAuthStore } from '@/store/auth'
@@ -22,6 +22,7 @@ export default function Templates({ system = false }: { system?: boolean }) {
   const [filter, setFilter] = useState<TemplateType | 'all'>('all')
   const [createOpen, setCreateOpen] = useState(false)
   const [sendFor, setSendFor] = useState<MessageTemplate | null>(null)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
   const [text, setText] = useState('')
   const [type, setType] = useState<TemplateType>('confirmation')
 
@@ -96,7 +97,7 @@ export default function Templates({ system = false }: { system?: boolean }) {
                   </button>
                 )}
                 <button
-                  onClick={() => remove.mutate(t.message_template_id)}
+                  onClick={() => setDeleteId(t.message_template_id)}
                   className="rounded-full p-1.5 text-muted hover:bg-danger-bg hover:text-danger"
                   aria-label="Удалить"
                 >
@@ -136,6 +137,16 @@ export default function Templates({ system = false }: { system?: boolean }) {
       </Modal>
 
       <SendModal template={sendFor} onClose={() => setSendFor(null)} />
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => { remove.mutate(deleteId!); setDeleteId(null) }}
+        title="Удалить шаблон?"
+        message="Это действие нельзя отменить."
+        confirmLabel="Удалить"
+        destructive
+      />
     </div>
   )
 }

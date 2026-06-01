@@ -1,0 +1,19 @@
+────────────────────────────────────────────────────────────────
+  FitTrack Load Test Report
+  2026-06-01T17:49:29.001Z   10 VUs/scenario
+────────────────────────────────────────────────────────────────
+
+  HTTP Request Duration
+    avg  50.7ms   min  0.0ms   max  442.7ms
+    p50  2.5ms   p90  227.8ms   p95  235.8ms   p99  N/A
+
+  Throughput & Errors
+    req/s       65.95   total 8213
+    error rate  0.00%
+
+  Per-scenario p95
+    auth          p95 260.9ms   avg 232.1ms
+    trainer       p95 6.0ms   avg 2.6ms
+    client        p95 31.9ms   avg 7.9ms
+
+────────────────────────────────────────────────────────────────

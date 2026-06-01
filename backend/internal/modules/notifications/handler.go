@@ -24,6 +24,8 @@ func RegisterRoutes(api fiber.Router, pool *pgxpool.Pool) {
 	api.Get("/notifications", h.List)
 	api.Patch("/notifications/:id/read", h.MarkRead)
 	api.Post("/notifications/read-all", h.MarkAllRead)
+	api.Delete("/notifications/:id", h.Delete)
+	api.Delete("/notifications", h.DeleteAll)
 }
 
 func (h *Handler) List(c *fiber.Ctx) error {
@@ -50,4 +52,22 @@ func (h *Handler) MarkAllRead(c *fiber.Ctx) error {
 		return response.Internal(c)
 	}
 	return response.OK(c, fiber.Map{"read": true})
+}
+
+func (h *Handler) Delete(c *fiber.Ctx) error {
+	id, err := strconv.ParseInt(c.Params("id"), 10, 64)
+	if err != nil {
+		return response.BadRequest(c, "invalid id")
+	}
+	if err := h.svc.Delete(c.Context(), id, middleware.LocalUserID(c)); err != nil {
+		return response.Internal(c)
+	}
+	return response.OK(c, fiber.Map{"deleted": true})
+}
+
+func (h *Handler) DeleteAll(c *fiber.Ctx) error {
+	if err := h.svc.DeleteAll(c.Context(), middleware.LocalUserID(c)); err != nil {
+		return response.Internal(c)
+	}
+	return response.OK(c, fiber.Map{"deleted": true})
 }

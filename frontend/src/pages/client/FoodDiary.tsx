@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Pencil, Plus, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageWrapper'
-import { Button, Card, Field, Input, Modal, PageLoader, StatCard, toast } from '@/components/ui'
+import { Button, Card, ConfirmDialog, DateTimeInput, Field, Input, Modal, PageLoader, StatCard, toast } from '@/components/ui'
 import { foodApi, type FoodEntryPayload } from '@/api'
 import { apiError } from '@/api/client'
 import { formatLongDate, formatTime, fromDateTimeLocal, toISODate } from '@/lib/format'
@@ -25,6 +25,7 @@ export default function FoodDiary() {
   const [editing, setEditing] = useState<FoodEntry | null>(null)
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState<FoodEntryPayload>(EMPTY)
+  const [deleteId, setDeleteId] = useState<number | null>(null)
 
   const { data: log, isLoading } = useQuery({
     queryKey: ['food-log', iso],
@@ -90,6 +91,15 @@ export default function FoodDiary() {
 
   const num = (v: string) => (v === '' ? null : Number(v))
 
+  const validateEntry = (): boolean => {
+    if (!form.title.trim()) { toast.error('Введите название блюда'); return false }
+    if (form.calories != null && form.calories < 0) { toast.error('Калории не могут быть отрицательными'); return false }
+    if (form.protein != null && form.protein < 0) { toast.error('Белки не могут быть отрицательными'); return false }
+    if (form.fat != null && form.fat < 0) { toast.error('Жиры не могут быть отрицательными'); return false }
+    if (form.carbs != null && form.carbs < 0) { toast.error('Углеводы не могут быть отрицательными'); return false }
+    return true
+  }
+
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title="Дневник питания" />
@@ -139,7 +149,7 @@ export default function FoodDiary() {
                     <Pencil className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(entry.food_entry_id)}
+                    onClick={() => setDeleteId(entry.food_entry_id)}
                     className="rounded-full p-1.5 text-muted hover:bg-danger-bg hover:text-danger"
                     aria-label="Удалить"
                   >
@@ -156,6 +166,15 @@ export default function FoodDiary() {
         </div>
       )}
 
+      <ConfirmDialog
+        open={deleteId !== null}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => { deleteMutation.mutate(deleteId!); setDeleteId(null) }}
+        title="Удалить запись?"
+        confirmLabel="Удалить"
+        destructive
+      />
+
       <Modal
         open={open}
         onClose={() => setOpen(false)}
@@ -166,9 +185,8 @@ export default function FoodDiary() {
               Отменить
             </Button>
             <Button
-              onClick={() => saveMutation.mutate()}
+              onClick={() => { if (validateEntry()) saveMutation.mutate() }}
               loading={saveMutation.isPending}
-              disabled={!form.title.trim()}
             >
               Сохранить
             </Button>
@@ -198,11 +216,10 @@ export default function FoodDiary() {
                 onChange={(e) => setForm((f) => ({ ...f, calories: num(e.target.value) }))}
               />
             </Field>
-            <Field label="Время приёма" table="food_entries" attr="meal_time">
-              <Input
-                type="datetime-local"
-                value={form.meal_time ? form.meal_time.slice(0, 16) : ''}
-                onChange={(e) => setForm((f) => ({ ...f, meal_time: e.target.value || null }))}
+            <Field label="Дата и время" table="food_entries" attr="meal_time">
+              <DateTimeInput
+                value={form.meal_time}
+                onChange={(v) => setForm((f) => ({ ...f, meal_time: v }))}
               />
             </Field>
           </div>

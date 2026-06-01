@@ -6,9 +6,13 @@ import { Button, Field, Input, toast } from '@/components/ui'
 import { Chip } from '@/components/ui/Chip'
 import { authApi } from '@/api'
 import { apiError } from '@/api/client'
+import { useAuthStore } from '@/store/auth'
+import { HOME_BY_ROLE } from '@/lib/nav'
+import { decodeJwt } from '@/lib/jwt'
 
 export default function Register() {
   const navigate = useNavigate()
+  const setSession = useAuthStore((s) => s.setSession)
   const [role, setRole] = useState<'client' | 'trainer'>('client')
   const [form, setForm] = useState({
     first_name: '',
@@ -23,18 +27,21 @@ export default function Register() {
     setForm((f) => ({ ...f, [k]: e.target.value }))
 
   const mutation = useMutation({
-    mutationFn: () =>
-      authApi.register({
+    mutationFn: async () => {
+      await authApi.register({
         first_name: form.first_name,
         last_name: form.last_name,
         email: form.email,
         password: form.password,
         role,
         ...(role === 'client' ? { invite_code: form.invite_code } : {}),
-      }),
-    onSuccess: () => {
-      toast.success('Аккаунт создан! Войдите в систему.')
-      navigate('/login', { replace: true })
+      })
+      return authApi.login({ email: form.email, password: form.password })
+    },
+    onSuccess: ({ token }) => {
+      setSession(token)
+      const payload = decodeJwt(token)
+      navigate(payload ? HOME_BY_ROLE[payload.role] : '/', { replace: true })
     },
     onError: (e) => setError(apiError(e)),
   })

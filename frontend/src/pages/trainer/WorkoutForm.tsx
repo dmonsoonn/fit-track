@@ -1,17 +1,29 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { GripVertical, Plus, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageWrapper'
-import { Button, Card, CardBody, EmptyState, Field, Input, Modal, PageLoader, Select, toast } from '@/components/ui'
+import { Button, Card, CardBody, ConfirmDialog, DateTimeInput, EmptyState, Field, Input, Modal, PageLoader, Select, toast } from '@/components/ui'
 import { exerciseApi, workoutApi, workoutExerciseApi } from '@/api'
 import { apiError } from '@/api/client'
-import { fromDateTimeLocal, toDateTimeLocal } from '@/lib/format'
+import { useUnsavedGuard } from '@/hooks/useUnsavedGuard'
+
+type PendingExercise = {
+  localId: number
+  exercise_id: number
+  exercise_name: string
+  sets: number
+  reps: number
+  weight: number | null
+  order: number
+}
 
 export default function WorkoutForm() {
-  const { id, planId } = useParams()
+  const { id, planId: routePlanId } = useParams()
   const [params] = useSearchParams()
   const clientId = params.get('clientId')
+  const queryPlanId = params.get('planId')
+  const effectivePlanId = routePlanId ?? queryPlanId
   const navigate = useNavigate()
   const qc = useQueryClient()
 
@@ -20,6 +32,9 @@ export default function WorkoutForm() {
 
   const [scheduledDate, setScheduledDate] = useState('')
   const [duration, setDuration] = useState('')
+  const [pending, setPending] = useState<PendingExercise[]>([])
+  const [saving, setSaving] = useState(false)
+  const { setDirty, blocker } = useUnsavedGuard()
 
   const { data: workout, isLoading: lw } = useQuery({
     queryKey: ['workout', workoutId],
@@ -34,42 +49,72 @@ export default function WorkoutForm() {
 
   useEffect(() => {
     if (workout) {
-      setScheduledDate(toDateTimeLocal(workout.scheduled_date))
+      setScheduledDate(workout.scheduled_date ?? '')
       setDuration(workout.duration_minutes ? String(workout.duration_minutes) : '')
     }
   }, [workout])
 
-  const backTo = clientId ? `/trainer/clients/${clientId}` : '/trainer/clients'
+  const backTo = effectivePlanId && clientId
+    ? `/trainer/clients/${clientId}/plans/${effectivePlanId}`
+    : clientId ? `/trainer/clients/${clientId}` : '/trainer/clients'
 
-  const createMut = useMutation({
-    mutationFn: () =>
-      workoutApi.create(Number(planId), {
-        scheduled_date: fromDateTimeLocal(scheduledDate) ?? '',
-        duration_minutes: duration ? Number(duration) : null,
-      }),
-    onSuccess: (w) => {
-      toast.success('Тренировка создана — добавьте упражнения')
-      qc.invalidateQueries({ queryKey: ['plan-workouts'] })
-      navigate(`/trainer/workouts/${w.workout_id}/edit?clientId=${clientId ?? ''}`, { replace: true })
-    },
-    onError: (e) => toast.error(apiError(e)),
-  })
+  const validateWorkout = (): boolean => {
+    if (duration && Number(duration) <= 0) {
+      toast.error('Длительность должна быть больше нуля')
+      return false
+    }
+    return true
+  }
 
   const patchMut = useMutation({
     mutationFn: () =>
       workoutApi.patch(workoutId!, {
-        scheduled_date: fromDateTimeLocal(scheduledDate) ?? undefined,
+        scheduled_date: scheduledDate || undefined,
         duration_minutes: duration ? Number(duration) : null,
       }),
     onSuccess: () => {
       toast.success('Сохранено. Клиент уведомлён о тренировке.')
       qc.invalidateQueries({ queryKey: ['workout', workoutId] })
       qc.invalidateQueries({ queryKey: ['plan-workouts'] })
+      setDirty(false)
+      navigate(backTo)
     },
     onError: (e) => toast.error(apiError(e)),
   })
 
+  const handleCreateSave = async () => {
+    if (!validateWorkout()) return
+    setSaving(true)
+    try {
+      const w = await workoutApi.create(Number(effectivePlanId), {
+        scheduled_date: scheduledDate,
+        duration_minutes: duration ? Number(duration) : null,
+      })
+      await Promise.all(
+        pending.map((ex) =>
+          workoutExerciseApi.add(w.workout_id, {
+            exercise_id: ex.exercise_id,
+            sets: ex.sets,
+            reps: ex.reps,
+            weight: ex.weight,
+            order: ex.order,
+          })
+        )
+      )
+      qc.invalidateQueries({ queryKey: ['plan-workouts'] })
+      toast.success('Тренировка сохранена. Клиент уведомлён.')
+      setDirty(false)
+      navigate(backTo)
+    } catch (e) {
+      toast.error(apiError(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const [pickerOpen, setPickerOpen] = useState(false)
+
+  const exerciseCount = isEdit ? (exercises ?? []).length : pending.length
 
   if (isEdit && lw) return <PageLoader />
 
@@ -80,78 +125,100 @@ export default function WorkoutForm() {
       <Card>
         <CardBody className="flex flex-col gap-4">
           <Field label="Дата и время" table="workouts" attr="scheduled_date">
-            <Input
-              type="datetime-local"
-              value={scheduledDate}
-              onChange={(e) => setScheduledDate(e.target.value)}
+            <DateTimeInput
+              value={scheduledDate || null}
+              onChange={(v) => { setDirty(true); setScheduledDate(v ?? '') }}
             />
           </Field>
           <Field label="Длительность, мин" table="workouts" attr="duration_minutes">
             <Input
               type="number"
               value={duration}
-              onChange={(e) => setDuration(e.target.value)}
+              onChange={(e) => { setDirty(true); setDuration(e.target.value) }}
               placeholder="60"
             />
           </Field>
         </CardBody>
       </Card>
 
-      {!isEdit ? (
-        <div className="mt-4 flex items-center justify-between">
-          <p className="text-sm text-muted">Сначала сохраните тренировку, затем добавьте упражнения.</p>
-          <Button onClick={() => createMut.mutate()} loading={createMut.isPending} disabled={!scheduledDate}>
-            Создать
-          </Button>
-        </div>
-      ) : (
-        <>
-          <div className="mt-5 flex items-center justify-between">
-            <h3>Упражнения</h3>
-            <Button size="sm" onClick={() => setPickerOpen(true)}>
-              <Plus className="h-4 w-4" /> Добавить
-            </Button>
-          </div>
+      <div className="mt-5 flex items-center justify-between">
+        <h3>Упражнения</h3>
+        <Button size="sm" onClick={() => setPickerOpen(true)}>
+          <Plus className="h-4 w-4" /> Добавить
+        </Button>
+      </div>
 
-          <div className="mt-3 flex flex-col gap-2">
-            {(exercises ?? []).length === 0 ? (
-              <EmptyState title="Упражнений ещё нет" />
-            ) : (
-              (exercises ?? [])
-                .slice()
-                .sort((a, b) => a.order - b.order)
-                .map((ex) => (
-                  <Card key={ex.workout_exercise_id} className="flex items-center gap-2 p-3">
-                    <GripVertical className="h-5 w-5 shrink-0 text-muted" />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-ink">{ex.exercise_name}</p>
-                      <p className="text-sm text-muted">
-                        {ex.sets} подх. × {ex.reps} повт.{ex.weight != null ? ` · ${ex.weight} кг` : ''}
-                      </p>
-                    </div>
-                    <RemoveExerciseButton workoutId={workoutId!} workoutExerciseId={ex.workout_exercise_id} />
-                  </Card>
-                ))
-            )}
-          </div>
+      <div className="mt-3 flex flex-col gap-2">
+        {exerciseCount === 0 ? (
+          <EmptyState title="Упражнений ещё нет" />
+        ) : isEdit ? (
+          (exercises ?? [])
+            .slice()
+            .sort((a, b) => a.order - b.order)
+            .map((ex) => (
+              <Card key={ex.workout_exercise_id} className="flex items-center gap-2 p-3">
+                <GripVertical className="h-5 w-5 shrink-0 text-muted" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-ink">{ex.exercise_name}</p>
+                  <p className="text-sm text-muted">
+                    {ex.sets} подх. × {ex.reps} повт.{ex.weight != null ? ` · ${ex.weight} кг` : ''}
+                  </p>
+                </div>
+                <RemoveExerciseButton workoutId={workoutId!} workoutExerciseId={ex.workout_exercise_id} />
+              </Card>
+            ))
+        ) : (
+          pending.map((ex) => (
+            <Card key={ex.localId} className="flex items-center gap-2 p-3">
+              <GripVertical className="h-5 w-5 shrink-0 text-muted" />
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-ink">{ex.exercise_name}</p>
+                <p className="text-sm text-muted">
+                  {ex.sets} подх. × {ex.reps} повт.{ex.weight != null ? ` · ${ex.weight} кг` : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setPending((p) => p.filter((e) => e.localId !== ex.localId))}
+                className="rounded-full p-1.5 text-muted hover:bg-danger-bg hover:text-danger"
+                aria-label="Удалить упражнение"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </Card>
+          ))
+        )}
+      </div>
 
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="outline" onClick={() => navigate(backTo)}>
-              Готово
-            </Button>
-            <Button onClick={() => patchMut.mutate()} loading={patchMut.isPending}>
-              Сохранить и уведомить
-            </Button>
-          </div>
+      <div className="mt-6 flex justify-end">
+        <Button
+          onClick={isEdit ? () => { if (validateWorkout()) patchMut.mutate() } : handleCreateSave}
+          loading={isEdit ? patchMut.isPending : saving}
+          disabled={!scheduledDate}
+        >
+          Сохранить и уведомить
+        </Button>
+      </div>
 
-          <AddExerciseModal
-            open={pickerOpen}
-            onClose={() => setPickerOpen(false)}
-            workoutId={workoutId!}
-            nextOrder={(exercises ?? []).length}
-          />
-        </>
-      )}
+      <AddExerciseModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        workoutId={isEdit ? workoutId! : undefined}
+        nextOrder={exerciseCount}
+        onLocalAdd={(ex) => {
+          setDirty(true)
+          setPending((p) => [...p, ex])
+          setPickerOpen(false)
+        }}
+      />
+
+      <ConfirmDialog
+        open={blocker.state === 'blocked'}
+        onClose={() => blocker.reset?.()}
+        onConfirm={() => blocker.proceed?.()}
+        title="Несохранённые изменения"
+        message="Изменения будут потеряны. Продолжить?"
+        confirmLabel="Уйти"
+      />
     </div>
   )
 }
@@ -175,9 +242,13 @@ function RemoveExerciseButton({ workoutId, workoutExerciseId }: { workoutId: num
 }
 
 function AddExerciseModal({
-  open, onClose, workoutId, nextOrder,
+  open, onClose, workoutId, nextOrder, onLocalAdd,
 }: {
-  open: boolean; onClose: () => void; workoutId: number; nextOrder: number
+  open: boolean
+  onClose: () => void
+  workoutId?: number
+  nextOrder: number
+  onLocalAdd?: (ex: PendingExercise) => void
 }) {
   const qc = useQueryClient()
   const { data: catalogue } = useQuery({ queryKey: ['exercises'], queryFn: exerciseApi.list, enabled: open })
@@ -185,10 +256,11 @@ function AddExerciseModal({
   const [sets, setSets] = useState('3')
   const [reps, setReps] = useState('10')
   const [weight, setWeight] = useState('')
+  const localIdRef = useRef(0)
 
-  const add = useMutation({
+  const addServer = useMutation({
     mutationFn: () =>
-      workoutExerciseApi.add(workoutId, {
+      workoutExerciseApi.add(workoutId!, {
         exercise_id: Number(exerciseId),
         sets: Number(sets),
         reps: Number(reps),
@@ -204,6 +276,27 @@ function AddExerciseModal({
     onError: (e) => toast.error(apiError(e)),
   })
 
+  const handleAdd = () => {
+    if (Number(sets) <= 0) { toast.error('Подходы должны быть больше нуля'); return }
+    if (Number(reps) <= 0) { toast.error('Повторения должны быть больше нуля'); return }
+    if (workoutId !== undefined) {
+      addServer.mutate()
+    } else {
+      const selected = (catalogue ?? []).find((ex) => ex.exercise_id === Number(exerciseId))
+      onLocalAdd?.({
+        localId: ++localIdRef.current,
+        exercise_id: Number(exerciseId),
+        exercise_name: selected?.name ?? '',
+        sets: Number(sets),
+        reps: Number(reps),
+        weight: weight ? Number(weight) : null,
+        order: nextOrder,
+      })
+      setExerciseId('')
+      setWeight('')
+    }
+  }
+
   return (
     <Modal
       open={open}
@@ -212,7 +305,11 @@ function AddExerciseModal({
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={onClose}>Отменить</Button>
-          <Button onClick={() => add.mutate()} loading={add.isPending} disabled={!exerciseId}>
+          <Button
+            onClick={handleAdd}
+            loading={addServer.isPending}
+            disabled={!exerciseId}
+          >
             Добавить
           </Button>
         </div>

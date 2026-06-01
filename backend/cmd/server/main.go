@@ -15,6 +15,7 @@ import (
 	"github.com/fittrack/backend/internal/modules/message_templates"
 	"github.com/fittrack/backend/internal/modules/notifications"
 	"github.com/fittrack/backend/internal/modules/trainers"
+	"github.com/fittrack/backend/internal/modules/stats"
 	"github.com/fittrack/backend/internal/modules/users"
 	"github.com/fittrack/backend/internal/modules/workout_plans"
 	"github.com/fittrack/backend/internal/modules/workout_results"
@@ -36,6 +37,7 @@ func main() {
 	s3 := storage.NewS3Client(cfg)
 
 	app := fiber.New(fiber.Config{
+		BodyLimit: 200 * 1024 * 1024, // 200 MB for video uploads
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {
@@ -64,6 +66,7 @@ func main() {
 	api := app.Group("/api/v1", authMW)
 
 	users.RegisterRoutes(api, pool, adminMW)
+	stats.RegisterRoutes(api, pool, adminMW)
 	trainers.RegisterRoutes(api, pool, trainerMW)
 	clients.RegisterRoutes(api, pool, trainerMW, clientMW)
 	exercises.RegisterRoutes(api, pool, s3, trainerMW)

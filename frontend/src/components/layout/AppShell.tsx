@@ -17,7 +17,7 @@ export function AppShell() {
   const { data: notifications } = useQuery({
     queryKey: ['notifications'],
     queryFn: notificationApi.list,
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
     enabled: role === 'client' || role === 'trainer',
   })
 

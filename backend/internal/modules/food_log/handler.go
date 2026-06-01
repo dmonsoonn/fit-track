@@ -90,7 +90,10 @@ func (h *Handler) PatchEntry(c *fiber.Ctx) error {
 	}
 	entry, err := h.svc.PatchEntry(c.Context(), middleware.LocalUserID(c), id, req)
 	if err != nil {
-		return handleErr(c, err)
+		if errors.Is(err, errNotFound) || errors.Is(err, errForbidden) {
+			return handleErr(c, err)
+		}
+		return response.BadRequest(c, err.Error())
 	}
 	return response.OK(c, entry)
 }

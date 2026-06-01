@@ -20,6 +20,7 @@ import ProgramEdit from '@/pages/trainer/ProgramEdit'
 import WorkoutForm from '@/pages/trainer/WorkoutForm'
 
 import AdminUsers from '@/pages/admin/Users'
+import AdminStats from '@/pages/admin/Stats'
 
 import Notifications from '@/pages/shared/Notifications'
 import Exercises from '@/pages/shared/Exercises'
@@ -67,6 +68,7 @@ export default function App() {
 
           {/* Admin */}
           <Route element={<RoleRoute allow={['admin']} />}>
+            <Route path="/admin/stats" element={<AdminStats />} />
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/exercises" element={<Exercises system />} />
             <Route path="/admin/templates" element={<Templates system />} />

@@ -2,7 +2,7 @@ import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes } fro
 import { cn } from '@/lib/cn'
 
 const fieldBase =
-  'w-full rounded-input border border-line bg-white px-3 text-ink placeholder:text-muted/70 ' +
+  'w-full rounded-input border border-line bg-white px-3 text-ink placeholder:text-muted/40 ' +
   'focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-page disabled:text-muted'
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
@@ -13,7 +13,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
   function Textarea({ className, ...rest }, ref) {
-    return <textarea ref={ref} className={cn(fieldBase, 'py-2.5 min-h-[80px]', className)} {...rest} />
+    return <textarea ref={ref} className={cn(fieldBase, 'py-2.5 min-h-[80px] max-h-[160px] resize-y', className)} {...rest} />
   },
 )
 

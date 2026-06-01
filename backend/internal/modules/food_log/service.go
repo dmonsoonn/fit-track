@@ -101,6 +101,18 @@ func (s *Service) AddEntry(ctx context.Context, clientUserID int64, date time.Ti
 	if req.Title == "" {
 		return nil, errors.New("title is required")
 	}
+	if req.Calories != nil && *req.Calories < 0 {
+		return nil, errors.New("calories cannot be negative")
+	}
+	if req.Protein != nil && *req.Protein < 0 {
+		return nil, errors.New("protein cannot be negative")
+	}
+	if req.Fat != nil && *req.Fat < 0 {
+		return nil, errors.New("fat cannot be negative")
+	}
+	if req.Carbs != nil && *req.Carbs < 0 {
+		return nil, errors.New("carbs cannot be negative")
+	}
 	clientID, err := s.resolveClientID(ctx, clientUserID)
 	if err != nil {
 		return nil, err
@@ -137,6 +149,18 @@ type PatchEntryRequest struct {
 }
 
 func (s *Service) PatchEntry(ctx context.Context, clientUserID, entryID int64, req PatchEntryRequest) (*FoodEntry, error) {
+	if req.Calories != nil && *req.Calories < 0 {
+		return nil, errors.New("calories cannot be negative")
+	}
+	if req.Protein != nil && *req.Protein < 0 {
+		return nil, errors.New("protein cannot be negative")
+	}
+	if req.Fat != nil && *req.Fat < 0 {
+		return nil, errors.New("fat cannot be negative")
+	}
+	if req.Carbs != nil && *req.Carbs < 0 {
+		return nil, errors.New("carbs cannot be negative")
+	}
 	clientID, err := s.resolveClientID(ctx, clientUserID)
 	if err != nil {
 		return nil, err

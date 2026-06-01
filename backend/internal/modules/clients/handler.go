@@ -2,6 +2,7 @@ package clients
 
 import (
 	"errors"
+	"log"
 	"strconv"
 
 	"github.com/fittrack/backend/internal/middleware"
@@ -74,6 +75,7 @@ func (h *Handler) GetMyProfile(c *fiber.Ctx) error {
 func (h *Handler) PatchMyProfile(c *fiber.Ctx) error {
 	var req PatchRequest
 	if err := c.BodyParser(&req); err != nil {
+		 log.Println("BodyParser error:", err)
 		return response.BadRequest(c, "invalid body")
 	}
 	cl, err := h.svc.PatchMyProfile(c.Context(), middleware.LocalUserID(c), req)

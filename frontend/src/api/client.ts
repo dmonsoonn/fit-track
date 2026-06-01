@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios'
 import type { ApiEnvelope } from '@/types'
 import { getToken, useAuthStore } from '@/store/auth'
+import { queryClient } from '@/lib/queryClient'
 
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1'
 
@@ -22,6 +23,7 @@ http.interceptors.response.use(
     if (error.response?.status === 401) {
       const { logout } = useAuthStore.getState()
       logout()
+      queryClient.clear()
       if (!window.location.pathname.startsWith('/login')) {
         window.location.assign('/login')
       }

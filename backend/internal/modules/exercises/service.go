@@ -6,15 +6,18 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 
 	"github.com/fittrack/backend/internal/storage"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
 	errNotFound  = errors.New("not found")
 	errForbidden = errors.New("forbidden")
+	errInUse     = errors.New("упражнение используется в тренировках и не может быть удалено")
 )
 
 type Service struct {
@@ -113,6 +116,9 @@ type PatchRequest struct {
 }
 
 func (s *Service) Patch(ctx context.Context, userID int64, role string, exerciseID int64, req PatchRequest) (*Exercise, error) {
+	if req.Name != nil && strings.TrimSpace(*req.Name) == "" {
+		return nil, errors.New("name cannot be blank")
+	}
 	e, err := s.repo.getByID(ctx, exerciseID)
 	if err != nil {
 		return nil, err
@@ -149,6 +155,10 @@ func (s *Service) Delete(ctx context.Context, userID int64, role string, exercis
 	err = s.repo.delete(ctx, exerciseID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return errNotFound
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+		return errInUse
 	}
 	return err
 }

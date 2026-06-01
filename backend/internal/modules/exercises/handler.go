@@ -104,6 +104,8 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 			return response.NotFound(c)
 		case errors.Is(err, errForbidden):
 			return response.Forbidden(c)
+		case errors.Is(err, errInUse):
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"data": nil, "error": err.Error()})
 		default:
 			return response.Internal(c)
 		}

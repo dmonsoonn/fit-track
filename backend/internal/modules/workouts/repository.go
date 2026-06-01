@@ -92,12 +92,45 @@ type createParams struct {
 }
 
 func (r *Repository) create(ctx context.Context, p createParams) (*Workout, error) {
-	row := r.pool.QueryRow(ctx,
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	row := tx.QueryRow(ctx,
 		`INSERT INTO workouts (workout_plan_id, scheduled_date, duration_minutes)
 		 VALUES ($1,$2,$3) RETURNING `+workoutCols,
 		p.PlanID, p.ScheduledDate, p.DurationMinutes,
 	)
-	return scanWorkout(row)
+	w, err := scanWorkout(row)
+	if err != nil {
+		return nil, err
+	}
+
+	// Notify client that a workout has been assigned.
+	var clientUserID int64
+	var trainerFirst, trainerLast string
+	if err := tx.QueryRow(ctx, `
+		SELECT u.user_id, tu.first_name, tu.last_name
+		  FROM workout_plans wp
+		  JOIN clients c   ON c.client_id   = wp.client_id
+		  JOIN users u     ON u.user_id     = c.user_id
+		  JOIN trainers t  ON t.trainer_id  = c.trainer_id
+		  JOIN users tu    ON tu.user_id    = t.user_id
+		 WHERE wp.workout_plan_id = $1`, p.PlanID,
+	).Scan(&clientUserID, &trainerFirst, &trainerLast); err == nil && clientUserID != 0 {
+		trainerName := trainerFirst + " " + trainerLast
+		_, _ = tx.Exec(ctx,
+			`INSERT INTO notifications (user_id, type, text, sender_name)
+			 VALUES ($1, 'workout_assigned', 'Вам назначена новая тренировка', $2)`, clientUserID, trainerName,
+		)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
 type patchParams struct {
@@ -150,9 +183,26 @@ func (r *Repository) complete(ctx context.Context, workoutID, trainerUserID int6
 		return err
 	}
 
+	// Resolve client name for a more informative notification.
+	notifText := "Клиент завершил тренировку"
+	var senderName *string
+	var firstName, lastName string
+	if err := tx.QueryRow(ctx, `
+		SELECT u.first_name, u.last_name
+		  FROM workouts w
+		  JOIN workout_plans p ON p.workout_plan_id = w.workout_plan_id
+		  JOIN clients c       ON c.client_id = p.client_id
+		  JOIN users u         ON u.user_id   = c.user_id
+		 WHERE w.workout_id = $1`, workoutID,
+	).Scan(&firstName, &lastName); err == nil {
+		fullName := firstName + " " + lastName
+		notifText = fullName + " завершил(а) тренировку"
+		senderName = &fullName
+	}
+
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO notifications (user_id, type, text)
-		 VALUES ($1, 'workout_completed', 'Клиент завершил тренировку')`, trainerUserID,
+		`INSERT INTO notifications (user_id, type, text, sender_name)
+		 VALUES ($1, 'workout_completed', $2, $3)`, trainerUserID, notifText, senderName,
 	); err != nil {
 		return err
 	}

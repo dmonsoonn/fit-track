@@ -85,6 +85,12 @@ type PatchRequest struct {
 }
 
 func (s *Service) PatchMyProfile(ctx context.Context, userID int64, req PatchRequest) (*Client, error) {
+	if req.Weight != nil && *req.Weight <= 0 {
+		return nil, errors.New("weight must be greater than 0")
+	}
+	if req.Height != nil && *req.Height <= 0 {
+		return nil, errors.New("height must be greater than 0")
+	}
 	if req.Level != nil {
 		switch *req.Level {
 		case "beginner", "intermediate", "advanced":

@@ -32,3 +32,11 @@ func (s *Service) MarkRead(ctx context.Context, notificationID, userID int64) er
 func (s *Service) MarkAllRead(ctx context.Context, userID int64) error {
 	return s.repo.markAllRead(ctx, userID)
 }
+
+func (s *Service) Delete(ctx context.Context, notificationID, userID int64) error {
+	return s.repo.deleteByID(ctx, notificationID, userID)
+}
+
+func (s *Service) DeleteAll(ctx context.Context, userID int64) error {
+	return s.repo.deleteAll(ctx, userID)
+}

@@ -10,19 +10,21 @@ import (
 )
 
 type Client struct {
-	ClientID     int64      `json:"client_id"`
-	UserID       int64      `json:"user_id"`
-	TrainerID    int64      `json:"trainer_id"`
-	Email        string     `json:"email"`
-	FirstName    string     `json:"first_name"`
-	LastName     string     `json:"last_name"`
-	Goal         *string    `json:"goal"`
-	Weight       *float64   `json:"weight"`
-	Height       *float64   `json:"height"`
-	Level        *string    `json:"level"`
-	HealthNotes  *string    `json:"health_notes"`
-	DateOfBirth  *time.Time `json:"date_of_birth"`
-	ActivePlan   *string    `json:"active_plan,omitempty"` // plan title
+	ClientID        int64      `json:"client_id"`
+	UserID          int64      `json:"user_id"`
+	TrainerID       int64      `json:"trainer_id"`
+	Email           string     `json:"email"`
+	FirstName       string     `json:"first_name"`
+	LastName        string     `json:"last_name"`
+	Goal            *string    `json:"goal"`
+	Weight          *float64   `json:"weight"`
+	Height          *float64   `json:"height"`
+	Level           *string    `json:"level"`
+	HealthNotes     *string    `json:"health_notes"`
+	DateOfBirth     *time.Time `json:"date_of_birth"`
+	ActivePlan      *string    `json:"active_plan,omitempty"`
+	TrainerFirstName string    `json:"trainer_first_name,omitempty"`
+	TrainerLastName  string    `json:"trainer_last_name,omitempty"`
 }
 
 type Repository struct {
@@ -38,6 +40,16 @@ const clientSelect = `
 	       c.goal, c.weight, c.height, c.level, c.health_notes, c.date_of_birth
 	  FROM clients c JOIN users u ON u.user_id = c.user_id`
 
+// clientSelectWithTrainer is used for /clients/me — includes trainer name via extra JOINs.
+const clientSelectWithTrainer = `
+	SELECT c.client_id, c.user_id, c.trainer_id, u.email, u.first_name, u.last_name,
+	       c.goal, c.weight, c.height, c.level, c.health_notes, c.date_of_birth,
+	       tu.first_name, tu.last_name
+	  FROM clients c
+	  JOIN users u   ON u.user_id   = c.user_id
+	  JOIN trainers t ON t.trainer_id = c.trainer_id
+	  JOIN users tu  ON tu.user_id  = t.user_id`
+
 func scanClient(row pgx.Row) (*Client, error) {
 	cl := &Client{}
 	err := row.Scan(
@@ -51,9 +63,32 @@ func scanClient(row pgx.Row) (*Client, error) {
 	return cl, err
 }
 
+func scanClientWithTrainer(row pgx.Row) (*Client, error) {
+	cl := &Client{}
+	err := row.Scan(
+		&cl.ClientID, &cl.UserID, &cl.TrainerID, &cl.Email,
+		&cl.FirstName, &cl.LastName, &cl.Goal, &cl.Weight,
+		&cl.Height, &cl.Level, &cl.HealthNotes, &cl.DateOfBirth,
+		&cl.TrainerFirstName, &cl.TrainerLastName,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	return cl, err
+}
+
 func (r *Repository) listByTrainer(ctx context.Context, trainerID int64) ([]Client, error) {
-	rows, err := r.pool.Query(ctx,
-		clientSelect+` WHERE c.trainer_id = $1 ORDER BY u.last_name, u.first_name`, trainerID)
+	const q = `
+		SELECT c.client_id, c.user_id, c.trainer_id, u.email, u.first_name, u.last_name,
+		       c.goal, c.weight, c.height, c.level, c.health_notes, c.date_of_birth,
+		       (SELECT wp.title FROM workout_plans wp
+		          WHERE wp.client_id = c.client_id AND wp.is_active = TRUE
+		          LIMIT 1) AS active_plan
+		  FROM clients c JOIN users u ON u.user_id = c.user_id
+		 WHERE c.trainer_id = $1
+		 ORDER BY u.last_name, u.first_name`
+
+	rows, err := r.pool.Query(ctx, q, trainerID)
 	if err != nil {
 		return nil, err
 	}
@@ -66,6 +101,7 @@ func (r *Repository) listByTrainer(ctx context.Context, trainerID int64) ([]Clie
 			&cl.ClientID, &cl.UserID, &cl.TrainerID, &cl.Email,
 			&cl.FirstName, &cl.LastName, &cl.Goal, &cl.Weight,
 			&cl.Height, &cl.Level, &cl.HealthNotes, &cl.DateOfBirth,
+			&cl.ActivePlan,
 		); err != nil {
 			return nil, err
 		}
@@ -80,8 +116,8 @@ func (r *Repository) getByClientID(ctx context.Context, clientID int64) (*Client
 }
 
 func (r *Repository) getByUserID(ctx context.Context, userID int64) (*Client, error) {
-	row := r.pool.QueryRow(ctx, clientSelect+` WHERE c.user_id = $1`, userID)
-	return scanClient(row)
+	row := r.pool.QueryRow(ctx, clientSelectWithTrainer+` WHERE c.user_id = $1`, userID)
+	return scanClientWithTrainer(row)
 }
 
 // getTrainerIDByClientID returns trainer_id for the given client.

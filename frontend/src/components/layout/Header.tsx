@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Dumbbell, LogOut } from 'lucide-react'
+import { Bell, Dumbbell, LogOut } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useAuthStore } from '@/store/auth'
 import { NAV_BY_ROLE } from '@/lib/nav'
+import { ConfirmDialog } from '@/components/ui'
+import { queryClient } from '@/lib/queryClient'
 
 const ROLE_LABEL: Record<string, string> = { admin: 'ADMIN', trainer: 'ТРЕНЕР', client: 'КЛИЕНТ' }
 
@@ -12,11 +15,17 @@ export function Header() {
   const displayName = useAuthStore((s) => s.displayName)
   const logout = useAuthStore((s) => s.logout)
   const navigate = useNavigate()
+  const [logoutOpen, setLogoutOpen] = useState(false)
   if (!role) return null
-  const items = NAV_BY_ROLE[role]
+
+  // Separate notification item (badge=true) from regular nav items
+  const allItems = NAV_BY_ROLE[role]
+  const navItems = allItems.filter((i) => !i.badge)
+  const notifItem = allItems.find((i) => i.badge)
 
   const onLogout = () => {
     logout()
+    queryClient.clear()
     navigate('/login', { replace: true })
   }
 
@@ -30,38 +39,55 @@ export function Header() {
           <span className="text-lg font-extrabold tracking-tight">FitTrack</span>
         </div>
 
-        {/* Desktop nav */}
+        {/* Desktop nav — regular items only */}
         <nav className="ml-4 hidden flex-1 items-center gap-1 lg:flex">
-          {items.map(({ to, label, badge }) => (
+          {navItems.map(({ to, label }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
                 cn(
-                  'relative rounded-btn px-3 py-2 text-sm font-medium transition-colors',
+                  'rounded-btn px-3 py-2 text-sm font-medium transition-colors',
                   isActive ? 'bg-primary-50 text-primary' : 'text-muted hover:bg-page',
                 )
               }
             >
               {label}
-              {badge && unread > 0 && (
-                <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
-                  {unread > 9 ? '9+' : unread}
-                </span>
-              )}
             </NavLink>
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2">
           {displayName && (
             <span className="hidden text-sm text-muted sm:inline">{displayName}</span>
           )}
           <span className="rounded-full bg-page px-2 py-0.5 text-[10px] font-bold text-muted">
             {ROLE_LABEL[role]}
           </span>
+
+          {/* Bell icon for notifications */}
+          {notifItem && (
+            <NavLink
+              to={notifItem.to}
+              className={({ isActive }) =>
+                cn(
+                  'relative rounded-btn p-2 transition-colors',
+                  isActive ? 'bg-primary-50 text-primary' : 'text-muted hover:bg-page',
+                )
+              }
+              title="Уведомления"
+            >
+              <Bell className="h-5 w-5" />
+              {unread > 0 && (
+                <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
+                  {unread > 9 ? '9+' : unread}
+                </span>
+              )}
+            </NavLink>
+          )}
+
           <button
-            onClick={onLogout}
+            onClick={() => setLogoutOpen(true)}
             className="flex items-center gap-1 rounded-btn px-2 py-1.5 text-sm text-muted hover:bg-page hover:text-danger"
             title="Выйти"
           >
@@ -70,6 +96,14 @@ export function Header() {
           </button>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={logoutOpen}
+        onClose={() => setLogoutOpen(false)}
+        onConfirm={onLogout}
+        title="Выйти из аккаунта?"
+        confirmLabel="Выйти"
+      />
     </header>
   )
 }

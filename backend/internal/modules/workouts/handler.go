@@ -3,6 +3,7 @@ package workouts
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/fittrack/backend/internal/middleware"
 	"github.com/fittrack/backend/internal/response"
@@ -42,6 +43,8 @@ func handleErr(c *fiber.Ctx, err error) error {
 		return response.Forbidden(c)
 	case errors.Is(err, errBadStatus):
 		return response.BadRequest(c, "workout is not in planned status")
+	case errors.Is(err, errInvalidInput):
+		return response.BadRequest(c, strings.TrimPrefix(err.Error(), "invalid input: "))
 	default:
 		return response.Internal(c)
 	}

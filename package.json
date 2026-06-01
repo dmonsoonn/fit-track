@@ -3,6 +3,11 @@
     "concurrently": "^10.0.0"
   },
   "scripts": {
-    "dev": "concurrently \"cd backend && go run ./cmd/server\" \"cd frontend && npm run dev\""
+    "dev": "docker compose up -d postgres minio && concurrently \"cd backend && go run ./cmd/server\" \"cd frontend && npm run dev\"",
+    "k6:smoke": "k6 run --env K6_TYPE=smoke k6/load-test.js",
+    "k6:load": "k6 run --env K6_TYPE=load k6/load-test.js",
+    "k6:stress": "k6 run --env K6_TYPE=stress k6/load-test.js",
+    "k6:bench": "k6 run --env K6_TYPE=bench k6/load-test.js",
+    "k6:bench-all": "powershell -ExecutionPolicy Bypass -File k6/run-benchmarks.ps1"
   }
 }

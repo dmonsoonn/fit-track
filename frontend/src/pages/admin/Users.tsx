@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageWrapper'
-import { Avatar, Badge, Button, Card, Chip, ChipGroup, EmptyState, Input, Modal, PageLoader, Select, StatCard, toast } from '@/components/ui'
+import { Avatar, Badge, Button, Card, Chip, ChipGroup, ConfirmDialog, EmptyState, Input, Modal, PageLoader, Select, StatCard, toast } from '@/components/ui'
 import { adminApi } from '@/api'
 import { apiError } from '@/api/client'
 import { fullName, initials, formatShortDate } from '@/lib/format'
@@ -139,6 +139,7 @@ export default function AdminUsers() {
 function EditUserModal({ user, onClose, onSaved }: { user: User | null; onClose: () => void; onSaved: () => void }) {
   const [role, setRole] = useState<Role>('client')
   const [active, setActive] = useState(true)
+  const [delOpen, setDelOpen] = useState(false)
 
   // sync local state when a user is selected
   useEffect(() => {
@@ -168,13 +169,14 @@ function EditUserModal({ user, onClose, onSaved }: { user: User | null; onClose:
   })
 
   return (
+    <>
     <Modal
       open={!!user}
       onClose={onClose}
       title={user ? fullName(user.first_name, user.last_name) : ''}
       footer={
         <div className="flex items-center justify-between">
-          <Button variant="ghost" className="text-danger" onClick={() => del.mutate()} loading={del.isPending}>
+          <Button variant="ghost" className="text-danger" onClick={() => setDelOpen(true)} loading={del.isPending}>
             Удалить
           </Button>
           <div className="flex gap-3">
@@ -205,5 +207,16 @@ function EditUserModal({ user, onClose, onSaved }: { user: User | null; onClose:
         </div>
       </div>
     </Modal>
+
+    <ConfirmDialog
+      open={delOpen}
+      onClose={() => setDelOpen(false)}
+      onConfirm={() => { del.mutate(); setDelOpen(false) }}
+      title="Удалить пользователя?"
+      message="Аккаунт будет удалён безвозвратно."
+      confirmLabel="Удалить"
+      destructive
+    />
+    </>
   )
 }

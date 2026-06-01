@@ -3,6 +3,7 @@ package workouts
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/fittrack/backend/internal/types"
@@ -11,9 +12,10 @@ import (
 )
 
 var (
-	errNotFound  = errors.New("not found")
-	errForbidden = errors.New("forbidden")
-	errBadStatus = errors.New("workout is not in planned status")
+	errNotFound     = errors.New("not found")
+	errForbidden    = errors.New("forbidden")
+	errBadStatus    = errors.New("workout is not in planned status")
+	errInvalidInput = errors.New("invalid input")
 )
 
 type Service struct {
@@ -122,6 +124,9 @@ type CreateRequest struct {
 }
 
 func (s *Service) Create(ctx context.Context, trainerUserID, planID int64, req CreateRequest) (*Workout, error) {
+	if req.DurationMinutes != nil && *req.DurationMinutes <= 0 {
+		return nil, fmt.Errorf("%w: duration must be greater than 0", errInvalidInput)
+	}
 	trainerID, err := s.resolveTrainerID(ctx, trainerUserID)
 	if err != nil {
 		return nil, err
@@ -142,6 +147,9 @@ type PatchRequest struct {
 }
 
 func (s *Service) Patch(ctx context.Context, trainerUserID, workoutID int64, req PatchRequest) (*Workout, error) {
+	if req.DurationMinutes != nil && *req.DurationMinutes <= 0 {
+		return nil, fmt.Errorf("%w: duration must be greater than 0", errInvalidInput)
+	}
 	w, err := s.repo.getByID(ctx, workoutID)
 	if err != nil || w == nil {
 		return nil, errNotFound

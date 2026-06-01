@@ -34,7 +34,7 @@ export function Modal({
         onClick={onClose}
         aria-hidden
       />
-      <div className="relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-card bg-card shadow-pop sm:rounded-card">
+      <div role="dialog" aria-modal="true" aria-label={title} className="relative z-10 flex max-h-[92vh] w-full max-w-lg flex-col rounded-t-card bg-card shadow-pop sm:rounded-card">
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <h3 className="text-lg font-semibold">{title}</h3>
           <button

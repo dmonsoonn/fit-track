@@ -83,12 +83,29 @@ func (r *Repository) patch(ctx context.Context, id int64, p patchParams) (*User,
 }
 
 func (r *Repository) delete(ctx context.Context, id int64) error {
-	tag, err := r.pool.Exec(ctx, "DELETE FROM users WHERE user_id = $1", id)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// Delete clients that belong to this trainer (if any) before removing the user,
+	// because clients.trainer_id → trainers.trainer_id has no ON DELETE CASCADE.
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM clients WHERE trainer_id IN (
+		   SELECT trainer_id FROM trainers WHERE user_id = $1
+		 )`, id,
+	); err != nil {
+		return err
+	}
+
+	tag, err := tx.Exec(ctx, "DELETE FROM users WHERE user_id = $1", id)
 	if err != nil {
 		return err
 	}
 	if tag.RowsAffected() == 0 {
 		return pgx.ErrNoRows
 	}
-	return nil
+
+	return tx.Commit(ctx)
 }

@@ -12,6 +12,7 @@ type Notification struct {
 	UserID         int64     `json:"user_id"`
 	Type           string    `json:"type"`
 	Text           string    `json:"text"`
+	SenderName     *string   `json:"sender_name"`
 	CreatedAt      time.Time `json:"created_at"`
 	IsRead         bool      `json:"is_read"`
 }
@@ -26,7 +27,7 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 
 func (r *Repository) listForUser(ctx context.Context, userID int64) ([]Notification, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT notification_id, user_id, type, text, created_at, is_read
+		`SELECT notification_id, user_id, type, text, sender_name, created_at, is_read
 		   FROM notifications WHERE user_id=$1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
@@ -36,7 +37,7 @@ func (r *Repository) listForUser(ctx context.Context, userID int64) ([]Notificat
 	var list []Notification
 	for rows.Next() {
 		n := Notification{}
-		if err := rows.Scan(&n.NotificationID, &n.UserID, &n.Type, &n.Text, &n.CreatedAt, &n.IsRead); err != nil {
+		if err := rows.Scan(&n.NotificationID, &n.UserID, &n.Type, &n.Text, &n.SenderName, &n.CreatedAt, &n.IsRead); err != nil {
 			return nil, err
 		}
 		list = append(list, n)
@@ -54,5 +55,17 @@ func (r *Repository) markRead(ctx context.Context, notificationID, userID int64)
 func (r *Repository) markAllRead(ctx context.Context, userID int64) error {
 	_, err := r.pool.Exec(ctx,
 		"UPDATE notifications SET is_read=TRUE WHERE user_id=$1 AND is_read=FALSE", userID)
+	return err
+}
+
+func (r *Repository) deleteByID(ctx context.Context, notificationID, userID int64) error {
+	_, err := r.pool.Exec(ctx,
+		"DELETE FROM notifications WHERE notification_id=$1 AND user_id=$2",
+		notificationID, userID)
+	return err
+}
+
+func (r *Repository) deleteAll(ctx context.Context, userID int64) error {
+	_, err := r.pool.Exec(ctx, "DELETE FROM notifications WHERE user_id=$1", userID)
 	return err
 }

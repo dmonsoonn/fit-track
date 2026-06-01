@@ -114,7 +114,10 @@ func (h *Handler) Patch(c *fiber.Ctx) error {
 	}
 	plan, err := h.svc.Patch(c.Context(), middleware.LocalUserID(c), clientID, planID, req)
 	if err != nil {
-		return handleErr(c, err)
+		if errors.Is(err, errNotFound) || errors.Is(err, errForbidden) {
+			return handleErr(c, err)
+		}
+		return response.BadRequest(c, err.Error())
 	}
 	return response.OK(c, plan)
 }

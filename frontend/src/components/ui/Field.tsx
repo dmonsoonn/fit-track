@@ -33,11 +33,6 @@ export function Field({ label, table, attr, hint, error, required, className, ch
       ) : hint ? (
         <span className="text-xs text-muted">{hint}</span>
       ) : null}
-      {import.meta.env.DEV && table && attr && (
-        <span className="dev-hint">
-          {table}.{attr}
-        </span>
-      )}
     </div>
   )
 }
