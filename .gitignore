@@ -26,3 +26,9 @@ dist-ssr
 CLAUDE.md
 .claude/
 tasks/
+
+.env
+!.env.example
+k6/reports/*
+!k6/reports/.gitkeep
+screens_v3.drawio
